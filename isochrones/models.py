@@ -15,6 +15,7 @@ from .interp import DFInterpolator, interp_eep, interp_eeps
 from .mags import interp_mag, interp_mags
 from .utils import addmags
 from .grid import Grid
+from .logger import getLogger
 
 G = const.G.cgs.value
 MSUN = const.M_sun.cgs.value
@@ -187,19 +188,42 @@ class StellarModelGrid(Grid):
             age_arrays = np.zeros((n, self.n_eep)) * np.nan
             dt_deep_arrays = np.zeros((n, self.n_eep)) * np.nan
             lengths = np.zeros(n) * np.nan
+            n_missing = 0
             for i, (x0, x1) in tqdm(
                 enumerate(itertools.product(ii0, ii1)), total=n, desc="building irregular age grid"
             ):
-                subdf = self.df.xs((x0, x1), level=(0, 1))
-                xs = subdf[self.eep_replaces].values
-                lengths[i] = len(xs)
                 try:
-                    age_arrays[i, : len(xs)] = xs
-                    dt_deep_arrays[i, : len(xs)] = subdf.dt_deep.values
-                except ValueError:
-                    import pdb
+                    subdf = self.df.xs((x0, x1), level=(0, 1))
+                except KeyError:
+                    # Not every (feh, mass) pair need exist; grids with
+                    # non-uniform mass sampling legitimately have gaps.
+                    lengths[i] = 0
+                    n_missing += 1
+                    continue
+                xs = subdf[self.eep_replaces].values
+                if len(xs) > self.n_eep:
+                    raise RuntimeError(
+                        "Track ({}={}, {}={}) has {} points but n_eep is {}; "
+                        "increase {}.n_eep to cover the longest track.".format(
+                            self.df.index.names[0],
+                            x0,
+                            self.df.index.names[1],
+                            x1,
+                            len(xs),
+                            self.n_eep,
+                            type(self).__name__,
+                        )
+                    )
+                lengths[i] = len(xs)
+                age_arrays[i, : len(xs)] = xs
+                dt_deep_arrays[i, : len(xs)] = subdf.dt_deep.values
 
-                    pdb.set_trace()
+            if n_missing:
+                getLogger().info(
+                    "{}/{} ({}, {}) pairs absent from the grid; marked length 0.".format(
+                        n_missing, n, self.df.index.names[0], self.df.index.names[1]
+                    )
+                )
 
             np.savez(
                 self.array_grid_filename, age=age_arrays, dt_deep=dt_deep_arrays, lengths=lengths.astype(int)
