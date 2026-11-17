@@ -1,10 +1,10 @@
 import re
+import urllib.request
 
 from .config import on_rtd
 
 if not on_rtd:
     from astropy.coordinates import SkyCoord
-    from six.moves import urllib
 
 
 def get_AV_infinity(ra, dec, frame="icrs"):
@@ -25,7 +25,8 @@ def get_AV_infinity(ra, dec, frame="icrs"):
     else:
         decsign = "%2D"
     url = (
-        "http://ned.ipac.caltech.edu/cgi-bin/nph-calc?in_csys=Equatorial&in_equinox=J2000.0&obs_epoch=2010&lon="
+        # NED stopped serving this endpoint over plain HTTP (it now returns 503).
+        "https://ned.ipac.caltech.edu/cgi-bin/nph-calc?in_csys=Equatorial&in_equinox=J2000.0&obs_epoch=2010&lon="
         + "%i" % rah
         + "%3A"
         + "%i" % ram
@@ -41,11 +42,12 @@ def get_AV_infinity(ra, dec, frame="icrs"):
     )
 
     AV = None
-    for line in urllib.request.urlopen(url).readlines():
-        m = re.search(b"^Landolt V \(0.54\)\s+(\d+\.\d+)", line)
-        if m:
-            AV = float(m.group(1))
-            break
+    with urllib.request.urlopen(url, timeout=60) as response:
+        for line in response:
+            m = re.search(rb"^Landolt V \(0\.54\)\s+(\d+\.\d+)", line)
+            if m:
+                AV = float(m.group(1))
+                break
 
     if AV is None:
         raise RuntimeError("AV query fails!  URL is {}".format(url))

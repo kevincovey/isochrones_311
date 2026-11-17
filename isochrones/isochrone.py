@@ -66,9 +66,9 @@ def get_ichrone(models, bands=None, default=False, tracks=False, basic=False, **
             ichrone = MIST_EvolutionTrack(bands=bands, **kwargs)
         else:
             if basic:
-                from isochrones.mist import MISTBasic_Isochrone
+                from isochrones.mist import MIST_BasicIsochrone
 
-                ichrone = MISTBasic_Isochrone(bands=bands, **kwargs)
+                ichrone = MIST_BasicIsochrone(bands=bands, **kwargs)
             else:
                 from isochrones.mist import MIST_Isochrone
 

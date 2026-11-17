@@ -69,7 +69,7 @@ def get_summary_df(names=None, pool=None, **kwargs):
 
     if filename is None:
         filename = "summary.h5"
-    df.to_hdf(filename, "df")
+    df.to_hdf(filename, key="df")
     pool.close()
 
     print("Summary dataframe written to {}".format(filename))

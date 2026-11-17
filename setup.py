@@ -1,5 +1,6 @@
 from setuptools import setup, find_packages
 import os, sys
+import builtins
 
 
 def readme():
@@ -9,10 +10,6 @@ def readme():
 
 # Hackishly inject a constant into builtins to enable importing of the
 # package before the library is built.
-if sys.version_info[0] < 3:
-    import __builtin__ as builtins
-else:
-    import builtins
 builtins.__ISOCHRONES_SETUP__ = True
 import isochrones
 
@@ -20,7 +17,7 @@ version = isochrones.__version__
 
 # Publish the library to PyPI.
 if "publish" in sys.argv[-1]:
-    os.system("python setup.py sdist upload")
+    os.system("python -m build && python -m twine upload dist/*")
     sys.exit()
 
 # Push a new tag to GitHub.
@@ -51,24 +48,39 @@ setup(
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",
         "Operating System :: OS Independent",
-        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
+    python_requires=">=3.9",
+    # Upper bounds on numpy/pandas were removed: the package is tested against
+    # numpy 2.x and pandas 3.x so it can share an environment with packages
+    # such as StarStream, which track current numpy/astropy.
     install_requires=[
-        "pandas>=0.14, <2.0",
-        "astropy>=0.3",
-        "emcee>=2.0",
-        "numpy>=1.9, < 2.0",
-        "tables>=3.0",
-        "scipy>=0.19",
-        "numba",
-        "flaky",
-        "pymultinest",
-        "asciitree",
+        "numpy>=1.20",
+        "pandas>=1.1",
+        "scipy>=1.5",
+        "numba>=0.56",
+        "astropy>=4.0",
+        "tables>=3.6",
+        "emcee>=3.0",
+        "matplotlib>=3.3",
+        "requests>=2.20",
         "corner",
         "astroquery",
         "configobj",
+        "asciitree",
         "tqdm",
     ],
+    extras_require={
+        # MultiNest sampling needs the MultiNest C library installed separately,
+        # so it is no longer a hard requirement; emcee sampling works without it.
+        "multinest": ["pymultinest"],
+        "test": ["pytest", "flaky"],
+        "plots": ["holoviews"],
+    },
     zip_safe=False,
 )

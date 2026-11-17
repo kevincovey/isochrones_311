@@ -1,7 +1,8 @@
-from __future__ import print_function, division
+import os
+import lzma
+import tarfile
 
 import requests
-import os
 
 import numpy as np
 import numba as nb
@@ -9,20 +10,62 @@ from math import log10
 
 from .logger import getLogger
 
+#: Chunk size (bytes) used when streaming downloads to disk.
+DOWNLOAD_CHUNK_SIZE = 1 << 20  # 1 MiB
+
+#: Default (connect, read) timeout in seconds for grid downloads.
+DOWNLOAD_TIMEOUT = (30, 300)
+
 
 def band_pairs(bands):
     return [(bands[i], bands[-1]) for i in range(len(bands) - 1)]
 
 
-def download_file(url, path=None, clobber=False):
-    """
-    thanks to: https://stackoverflow.com/questions/16694907/how-to-download-large-file-in-python-with-requests-py
+def is_valid_archive(path):
+    """True if ``path`` looks like a readable (xz-compressed) tar archive.
 
-    path : str
-        local path to download to.
+    The MIST grids are served as ``.txz`` files.  When a URL has moved, the web
+    server happily returns a small HTML error page with a 200 or 404 status,
+    which used to get cached on disk under the tarball's name and then fail
+    later with a confusing ``tarfile.ReadError``.  Checking the magic number and
+    asking ``tarfile`` to open the file catches that immediately.
+    """
+    try:
+        if os.path.getsize(path) < 128:
+            return False
+        with open(path, "rb") as fin:
+            magic = fin.read(6)
+        # xz magic number; MIST tarballs are always .txz
+        if magic[:6] != b"\xfd7zXZ\x00":
+            return False
+        with tarfile.open(path) as tar:
+            tar.next()
+    except (OSError, tarfile.TarError, lzma.LZMAError, EOFError):
+        return False
+    return True
+
+
+def download_file(url, path=None, clobber=False, timeout=DOWNLOAD_TIMEOUT):
+    """Stream ``url`` to a local file, raising on any HTTP error.
+
+    The download goes to a ``.part`` file that is only moved into place once the
+    whole body has arrived, so an interrupted or failed download never leaves a
+    truncated file behind that would be mistaken for a valid cached grid.
+
+    Parameters
+    ----------
+    url : str
+        Remote URL to fetch.
+    path : str, optional
+        Local path to download to.  Defaults to the URL's basename in the
+        current working directory.
+    clobber : bool
+        If False (default) and ``path`` already exists, do nothing.
+    timeout : float or (float, float)
+        Passed through to :func:`requests.get`.
     """
     if path is None:
-        local_filename = os.path.join(directory, url.split("/")[-1])
+        local_filename = os.path.join(os.getcwd(), url.split("/")[-1])
     else:
         local_filename = path
 
@@ -30,13 +73,29 @@ def download_file(url, path=None, clobber=False):
         getLogger().info("{} exists; not downloading.".format(local_filename))
         return local_filename
 
-    # NOTE the stream=True parameter
-    r = requests.get(url, stream=True)
-    with open(local_filename, "wb") as f:
-        for chunk in r.iter_content(chunk_size=1024):
-            if chunk:  # filter out keep-alive new chunks
-                f.write(chunk)
-                # f.flush() commented by recommendation from J.F.Sebastian
+    directory = os.path.dirname(os.path.abspath(local_filename))
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
+    partial_filename = local_filename + ".part"
+    try:
+        with requests.get(url, stream=True, timeout=timeout) as r:
+            # Without this, an HTML "404 Not Found" page gets written to disk
+            # and cached under the tarball's name.
+            r.raise_for_status()
+            with open(partial_filename, "wb") as f:
+                for chunk in r.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+        os.replace(partial_filename, local_filename)
+    except BaseException:
+        if os.path.exists(partial_filename):
+            try:
+                os.remove(partial_filename)
+            except OSError:
+                pass
+        raise
+
     return local_filename
 
 

@@ -36,9 +36,19 @@ def test_tracks(bands="JHK"):
 
 
 def test_AV():
+    import socket
+    import urllib.error
+
+    import pytest
+
     from isochrones.extinction import get_AV_infinity
 
-    AV = get_AV_infinity(299.268036, 45.227428)
+    try:
+        AV = get_AV_infinity(299.268036, 45.227428)
+    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError) as e:
+        # This queries NED over the network; don't fail the suite when the
+        # service is unreachable or rate-limiting us.
+        pytest.skip("NED extinction service unreachable: {}".format(e))
     assert np.isclose(AV, 1.216)
 
 

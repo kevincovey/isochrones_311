@@ -31,7 +31,7 @@ class MISTBolometricCorrectionGrid(BolometricCorrectionGrid):
             "TESS",
         ],
         WISE=["WISE_W1", "WISE_W2", "WISE_W3", "WISE_W4"],
-        CFHT=["CFHT_u", "CFHT_g", "CFHT_r", "CFHT_i_new", "CFHT_i_old", "CFHT_z"],
+        CFHTugriz=["CFHT_u", "CFHT_g", "CFHT_r", "CFHT_i_new", "CFHT_i_old", "CFHT_z"],
         DECam=["DECam_u", "DECam_g", "DECam_r", "DECam_i", "DECam_z", "DECam_Y"],
         GALEX=["GALEX_FUV", "GALEX_NUV"],
         JWST=[
@@ -191,26 +191,14 @@ class MISTBolometricCorrectionGrid(BolometricCorrectionGrid):
         elif b in ["W1", "W2", "W3", "W4"]:
             phot = "WISE"
             band = "WISE_{}".format(b)
-        elif b in ("G", "BP", "RP"):
+        elif b in ("G", "BP", "RP", "Bp", "Rp"):
             phot = "UBVRIplus"
-            band = "Gaia_{}_DR2Rev".format(b)
-            if "version" in kwargs:
-                if kwargs["version"] in ("1.1", "1.2"):
-                    band += "_DR2Rev"
-        elif b == "Bp":
-            phot = "UBVRIplus"
-            band = "Gaia_BP_DR2Rev"
-            if "version" in kwargs:
-                if kwargs["version"] in ("1.1", "1.2"):
-                    band += "_DR2Rev"
-        elif b == "Rp":
-            phot = "UBVRIplus"
-            band = "Gaia_RP_DR2Rev"
-            if "version" in kwargs:
-                if kwargs["version"] in ("1.1", "1.2"):
-                    band += "_DR2Rev"
+            band = "Gaia_{}_DR2Rev".format(b.upper())
+        elif b in ("CFHT_u", "CFHT_g", "CFHT_r", "CFHT_i_new", "CFHT_i_old", "CFHT_z"):
+            phot = "CFHTugriz"
+            band = b
         else:
-            m = re.match("([a-zA-Z]+)_([a-zA-Z_]+)", b)
+            m = re.match("([a-zA-Z0-9]+)_([a-zA-Z0-9_.]+)", b)
             if m:
                 if m.group(1) in cls.phot_bands.keys():
                     phot = m.group(1)
@@ -218,6 +206,9 @@ class MISTBolometricCorrectionGrid(BolometricCorrectionGrid):
                         band = "PS_{}".format(m.group(2))
                     else:
                         band = m.group(0)
+                elif m.group(1) in ["CFHT"]:
+                    phot = "CFHTugriz"
+                    band = m.group(0)
                 elif m.group(1) in ["UK", "UKIRT"]:
                     phot = "UKIDSS"
                     band = "UKIDSS_{}".format(m.group(2))

@@ -89,9 +89,19 @@ class BolometricCorrectionGrid(Grid):
     def get_hdf_filename(self, phot):
         return os.path.join(self.datadir, "{}.h5".format(phot))
 
+    #: Root of the MIST download site.  The old ``waps.cfa.harvard.edu/MIST``
+    #: host now redirects here, but the bolometric-correction tables were also
+    #: re-organised into per-version subdirectories, so the old paths 404.
+    bc_url_base = "https://mist.science/BC_tables"
+
+    #: Subdirectory of ``bc_url_base`` holding the tables for this grid.
+    #: MIST v1.x BCs live under ``v1/``, MIST v2.x BCs under ``v2/``.
+    bc_url_version = "v1"
+
     def get_tarball_url(self, phot):
-        url = "http://waps.cfa.harvard.edu/MIST/BC_tables/{}.txz".format(phot)
-        return url
+        return "{base}/{version}/{phot}.txz".format(
+            base=self.bc_url_base.rstrip("/"), version=self.bc_url_version, phot=phot
+        )
 
     def get_tarball_file(self, phot):
         return os.path.join(self.datadir, "{}.txz".format(phot))
@@ -106,13 +116,12 @@ class BolometricCorrectionGrid(Grid):
                     self.extract_tarball(phot=phot)
                     filenames = glob.glob(os.path.join(self.datadir, "*.{}".format(phot)))
                 df = pd.concat([self.parse_table(f) for f in filenames]).sort_index()
-                df.to_hdf(hdf_filename, "df")
+                df.to_hdf(hdf_filename, key="df")
             df = pd.read_hdf(hdf_filename)
             df_all = pd.concat([df_all, df], axis=1)
 
         df_all = df_all.rename(columns={v: k for k, v in self.band_map.items()})
-        for col in df_all.columns:
-            if col not in self.bands:
-                del df_all[col]
+        keep = [c for c in df_all.columns if c in self.bands]
+        df_all = df_all[keep]
 
         return df_all

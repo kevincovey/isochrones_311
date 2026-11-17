@@ -2,8 +2,14 @@ import os, sys
 import pandas as pd
 import numpy as np
 
-import emcee3
-from emcee3.backends import Backend, HDFBackend
+try:
+    import emcee3
+    from emcee3.backends import Backend, HDFBackend
+except ImportError as e:  # pragma: no cover - optional dependency
+    raise ImportError(
+        "isochrones.fit requires the (unmaintained) emcee3 package. "
+        "Use StarModel.fit(), which samples with MultiNest or emcee, instead."
+    ) from e
 
 
 class Emcee3Model(emcee3.Model):
@@ -41,7 +47,7 @@ def write_samples(mod, df, resultsdir="results"):
     if not os.path.exists(resultsdir):
         os.makedirs(resultsdir)
     samplefile = os.path.join(resultsdir, "{}.h5".format(mod.name))
-    df.to_hdf(samplefile, "samples")
+    df.to_hdf(samplefile, key="samples")
 
 
 def fit_emcee3(

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.DS_Store
+# test run artifacts
+isochrones/tests/star1/starfit.log
+isochrones/tests/star1/*_starmodel_*.h5
+isochrones/tests/star1/*.png

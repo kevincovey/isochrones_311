@@ -138,16 +138,21 @@ class StellarModelGrid(Grid):
             # need grid to work with first
             df = self.get_df()
 
-            # Make bucket for derivative to go in
-            df["dm_deep"] = np.nan
+            # Compute d(initial_mass)/d(eep) along each (feh, age) isochrone.
+            #
+            # This used to be written via ``df.loc[f, a].loc[:, "dm_deep"] = ...``,
+            # which is chained assignment: under pandas' copy-on-write (default
+            # from pandas 3) the write lands on a temporary and the column comes
+            # out entirely NaN.  Compute into a positional array instead.
+            deriv = np.full(len(df), np.nan)
+            mass = df["initial_mass"].values
+            eep = df["eep"].values
+            for _, idx in df.groupby(level=[0, 1], sort=False).indices.items():
+                if len(idx) > 1:
+                    deriv[idx] = np.gradient(mass[idx], eep[idx])
+            df["dm_deep"] = deriv
 
-            # Compute derivative for each (feh, age) isochrone, and fill in
-            for f, a in itertools.product(*df.index.levels[:2]):
-                subdf = df.loc[f, a]
-                deriv = np.gradient(subdf["initial_mass"], subdf["eep"])
-                subdf.loc[:, "dm_deep"] = deriv
-
-            df.dm_deep.to_hdf(filename, "dm_deep")
+            df.dm_deep.to_hdf(filename, key="dm_deep")
             dm_deep = pd.read_hdf(filename, "dm_deep")
 
         return dm_deep
@@ -450,7 +455,7 @@ class ModelGridInterpolator(object):
         eep = self.get_eep(mass, age, feh, approx=approx)
         values = self.interp_value([mass, eep, feh])
         if np.size(values) == 1:
-            return float(values)
+            return np.asarray(values).item()
         else:
             return values
 
@@ -464,7 +469,7 @@ class ModelGridInterpolator(object):
         pars = [mass, eep, feh, distance, AV]
         _, _, _, mags = self.interp_mag(pars, bands)
         if np.size(mags) == 1:
-            return float(mags)
+            return np.asarray(mags).item()
         else:
             return mags
 
@@ -570,7 +575,8 @@ class ModelGridInterpolator(object):
             return result
 
         if result.success and result.fun < resid_tol ** 2:
-            return float(result.x)
+            # result.x is a shape-(1,) array; numpy >= 2 refuses float() on it.
+            return np.asarray(result.x).item()
         else:
             if return_nan:
                 return np.nan
@@ -592,9 +598,11 @@ class ModelGridInterpolator(object):
         all_As=False,
         **kwargs,
     ):
-        # Pre-empt potential type/shape issues
+        # Pre-empt potential type/shape issues.
+        # ``.item()`` rather than ``float()``: numpy >= 2 refuses float() on a
+        # size-1 array that still has a dimension (e.g. np.array([1.0])).
         mass, age, feh, distance, AV = [
-            np.atleast_1d(a) if np.size(a) > 1 else float(a)
+            np.atleast_1d(a) if np.size(a) > 1 else np.asarray(a).item()
             for a in np.broadcast_arrays(mass, age, feh, distance, AV)
         ]
 
