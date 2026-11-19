@@ -33,7 +33,7 @@ compiles against. All from conda-forge, so the binaries are mutually
 consistent.
 
 ```bash
-conda create -y -n isochrones311 -c conda-forge python=3.11 numpy scipy pandas numba pytables astropy matplotlib emcee corner astroquery configobj tqdm requests asciitree pip setuptools wheel pytest flaky gsl eigen
+conda create -y -n isochrones311 -c conda-forge python=3.11 numpy scipy pandas numba pytables astropy matplotlib jupyter emcee corner astroquery configobj tqdm requests asciitree pip setuptools wheel pytest flaky gsl eigen
 ```
 
 ```bash
