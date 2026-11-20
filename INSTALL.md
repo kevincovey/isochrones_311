@@ -6,8 +6,9 @@ environment that runs:
 * **[isochrones_311](https://github.com/kevincovey/isochrones_311)** — this fork, updated for
   Python 3.11 / numpy 2.x / pandas 3.x, with MIST downloads pointed at
   `https://mist.science`
-* **[StarStream](https://github.com/ybillchen/StarStream)** — stellar-stream detection
-  (needs `agama`)
+* **[StarStream-src](https://github.com/kevincovey/StarStream-src)** — our revised fork of
+  [StarStream](https://github.com/ybillchen/StarStream) for stellar-stream detection
+  (needs `agama`), installed from the **`ngc6569-cluster-analysis`** branch
 * optionally **[isochrones-v2p5](https://github.com/DavidMoiseNataf/isochrones-v2p5)** — MIST v2.5
   and BaSTI extensions with [α/Fe] as a parameter
 
@@ -33,7 +34,7 @@ compiles against. All from conda-forge, so the binaries are mutually
 consistent.
 
 ```bash
-conda create -y -n isochrones311 -c conda-forge python=3.11 numpy scipy pandas numba pytables astropy matplotlib jupyter emcee corner astroquery configobj tqdm requests asciitree pip setuptools wheel pytest flaky gsl eigen
+conda create -y -n isochrones311 -c conda-forge python=3.11 numpy scipy pandas numba pytables astropy matplotlib emcee corner astroquery configobj tqdm requests asciitree pip setuptools wheel pytest flaky gsl eigen
 ```
 
 ```bash
@@ -79,40 +80,236 @@ python -c "import agama; print('agama', agama.__version__)"
 
 ---
 
-## 3. Install StarStream
+## 3. Install StarStream (our revised fork)
 
-> **Do not use `pip install git+https://github.com/ybillchen/StarStream.git`.**
-> Upstream's `setup.py` declares
-> `packages = find_packages(where="StarStream")`, which searches *inside* the
-> package directory and therefore finds nothing. pip reports success, but the
-> wheel contains only metadata — no code — and `import StarStream` then fails
-> with `ModuleNotFoundError`. Clone and fix the one line first:
+We install from our own fork, **[kevincovey/StarStream-src](https://github.com/kevincovey/StarStream-src)**,
+and specifically from the **`ngc6569-cluster-analysis`** branch. Relative to
+upstream that branch carries:
 
-Clone into `StarStream-src`, **not** `StarStream`: a directory named
-`StarStream` next to where you run python shadows the installed package as an
-empty namespace package, and imports then fail in confusing ways.
+* the `setup.py` packaging fix described below, already applied
+* memory-chunked KDE evaluation in `StarStream/pdf.py`. Upstream builds one
+  `(N_tracer, N_star, 6)` temporary array, which reaches tens of GB for a
+  field of ~10^6 stars and kills the process; the chunked version gives
+  bitwise-identical results in bounded memory
+* a fix for `GaiaBackgroundPDF` accepting `dx`, `dmu`, `dcolor` and `dmag`
+  and then silently overwriting all four with hard-coded values
+* worked examples on real Gaia DR3 data, including `examples/NGC6569.ipynb`
+
+> **The branch is not optional.** Our fork's `main` branch is still a
+> byte-for-byte copy of upstream, packaging bug included. If you clone and
+> forget to switch branches, `pip` will report a *successful* install, the
+> built wheel will contain metadata but no Python code, and `import
+> StarStream` will fail with `ModuleNotFoundError`. Step 3.7 below checks for
+> exactly this.
+
+### Why not just `pip install git+...`?
+
+> Upstream's `setup.py` declares `packages = find_packages(where="StarStream")`,
+> which searches *inside* the package directory and therefore finds nothing.
+> Our branch replaces it with
+> `find_packages(include=["StarStream", "StarStream.*"])`, so the one-line
+> `sed` patch older versions of this guide told you to apply by hand is no
+> longer needed — it is committed. We still clone rather than
+> `pip install git+...` because you will want the `examples/` notebooks and
+> the ability to edit the code.
+
+### 3.1 Clone the repository
+
+Run this from wherever you keep source code (e.g. `~/python`):
 
 ```bash
-git clone https://github.com/ybillchen/StarStream.git StarStream-src
+git clone https://github.com/kevincovey/StarStream-src.git
 ```
 
+This creates a new folder called `StarStream-src` containing the code. You do
+not need a GitHub account and you do not need to be logged in — the
+repository is public, so cloning works anonymously.
+
+**Keep the folder name `StarStream-src`.** Do not rename it to
+`StarStream`: a folder named exactly `StarStream` sitting next to where you
+start python will shadow the installed package as an empty namespace package,
+and your imports will fail in confusing ways. Cloning this fork gives you the
+right name automatically.
+
+### 3.2 Move into the folder
+
 ```bash
-cd StarStream-src && sed -i.bak 's|packages = find_packages(where="StarStream")|packages = find_packages(include=["StarStream", "StarStream.*"])|' setup.py && cd ..
+cd StarStream-src
+```
+
+Every `git` command in the next few steps has to be run from *inside* this
+folder. Git works on "the repository I am currently standing in", so running
+these from elsewhere will report `not a git repository`.
+
+### 3.3 See which branches exist
+
+A repository can hold several parallel versions of the code, called
+*branches*. List them:
+
+```bash
+git branch -a
+```
+
+You will see something like:
+
+```
+* main
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/main
+  remotes/origin/ngc6569-cluster-analysis
+```
+
+Reading that output:
+
+* the `*` marks the branch you are **currently on**. A fresh clone always
+  starts on the project's default branch, which here is `main`.
+* lines beginning `remotes/origin/` are branches that exist **on GitHub**.
+  `origin` is git's default nickname for "the place I cloned from".
+* `remotes/origin/ngc6569-cluster-analysis` is the one we want. It has no
+  local copy yet, which is why it only appears in the `remotes/` list.
+
+### 3.4 Switch to the `ngc6569-cluster-analysis` branch
+
+```bash
+git checkout ngc6569-cluster-analysis
+```
+
+Expected output — two lines, which may appear in either order:
+
+```
+Switched to a new branch 'ngc6569-cluster-analysis'
+branch 'ngc6569-cluster-analysis' set up to track 'origin/ngc6569-cluster-analysis'.
+```
+
+Git noticed that a branch of this name exists on GitHub, made you a local
+copy, and switched your files over to it. The contents of the folder on disk
+have now physically changed to the revised version.
+
+`git switch ngc6569-cluster-analysis` does exactly the same thing; `switch` is
+the newer spelling and `checkout` is the one you will see in older
+documentation. Either is fine.
+
+### 3.5 Confirm you are on the right branch
+
+```bash
+git status
+```
+
+The first line must read:
+
+```
+On branch ngc6569-cluster-analysis
+```
+
+And check you have the expected commit:
+
+```bash
+git log --oneline -1
+```
+
+which should print:
+
+```
+3c9ac3b Add NGC 6569 cluster analysis and fix PDF evaluation for large fields
+```
+
+> **One-step alternative.** Once you know the branch name, you can clone and
+> select it in a single command, skipping 3.2 through 3.5:
+>
+> ```bash
+> git clone --branch ngc6569-cluster-analysis https://github.com/kevincovey/StarStream-src.git
+> ```
+
+### 3.6 Install it, editable
+
+Step back out of the repository folder and install:
+
+```bash
+cd ..
 ```
 
 ```bash
 pip install -e ./StarStream-src
 ```
 
+Make sure the `isochrones311` environment is still active first — your prompt
+should start with `(isochrones311)`. If not, run `conda activate isochrones311`.
+
+The `-e` flag means *editable*: pip does not copy the code into
+`site-packages`, it just records a pointer to your `StarStream-src` folder.
+Two consequences worth understanding:
+
+* edits you make to the files take effect the next time you start python, with
+  no reinstall
+* **switching git branches changes the code python imports**, immediately.
+  The install follows the folder, not the branch you installed from
+
+### 3.7 Verify
+
 ```bash
 python -c "import StarStream; print('StarStream', StarStream.__version__, 'OK')"
 ```
 
-If that prints a version, the fix took. If it raises `ModuleNotFoundError` or
-`AttributeError: ... has no attribute '__version__'`, check that
-`StarStream-src/StarStream.egg-info/top_level.txt` contains `StarStream`
-rather than being empty, and that you are not sitting in a directory that
-contains a folder called `StarStream`.
+Expected: `StarStream 0.1.0 OK`.
+
+Then confirm you are running the *revised* code rather than an upstream copy,
+by checking for a function signature that only exists on our branch:
+
+```bash
+python -c "import inspect, StarStream.pdf as P; print('revised build:', 'max_elements' in inspect.signature(P.KernelPDF.eval_pdf).parameters)"
+```
+
+Expected: `revised build: True`. If it prints `False`, you have upstream's
+code — go back to step 3.4, then rerun `pip install -e ./StarStream-src`.
+
+Finally, run the test suite from inside the clone:
+
+```bash
+cd StarStream-src && pytest tests/ -q && cd ..
+```
+
+Expect **3 passed**.
+
+### Troubleshooting
+
+If `import StarStream` raises `ModuleNotFoundError`, or
+`AttributeError: ... has no attribute '__version__'`:
+
+* check `git status` reports `On branch ngc6569-cluster-analysis` (step 3.5) —
+  this is by far the most common cause
+* check `StarStream-src/StarStream.egg-info/top_level.txt` contains
+  `StarStream` rather than being empty
+* check you are not sitting in a directory that contains a folder called
+  `StarStream`
+
+### Keeping up to date
+
+```bash
+cd StarStream-src && git pull && cd ..
+```
+
+`git pull` fetches new commits for the branch you are currently on. Because
+the install is editable, there is nothing to reinstall afterwards.
+
+### Running the example notebooks
+
+The notebooks in `examples/` need a Jupyter kernel pointing at this
+environment. Register one:
+
+```bash
+python -m ipykernel install --user --name isochrones311 --display-name "Python (isochrones311)"
+```
+
+Then pick **Python (isochrones311)** from Jupyter's kernel menu. If a notebook
+is saved with a different kernel, Jupyter may silently start that other
+environment instead — and if the other environment has upstream StarStream
+installed, you will be running the unrevised code without noticing.
+
+> **The Gaia data files are not in the repository.** `examples/NGC6569.ipynb`
+> reads a 1.1 GB VOTable that exceeds GitHub's 100 MB file limit, so it is
+> gitignored. The notebook records the exact ADQL query in a markdown cell —
+> run it at the [Gaia archive](https://gea.esac.esa.int/archive/) and save the
+> result as `examples/data/NGC6569.vot`.
 
 ---
 
@@ -169,6 +366,13 @@ print('rows:', len(iso))
 print('G range: %.2f .. %.2f' % (iso.G_mag.min(), iso.G_mag.max()))
 "
 ```
+
+> **`age` is log10(age/yr), not Gyr.** The `10.0` above is log10(10 Gyr), so
+> it happens to read like an age in Gyr — a coincidence that is easy to
+> copy wrongly. For a 12.8 Gyr cluster pass `np.log10(12.8e9)` = 10.107, not
+> `12.8`. An off-grid age returns an **empty** DataFrame rather than raising,
+> and the resulting NaNs surface much later as a confusing error from
+> whatever consumes the isochrone.
 
 The tests are not shipped in a usable form by the wheel, so run them from a
 clone. Expect **26 passed, 1 skipped** (the skip is a deliberately disabled
@@ -250,10 +454,13 @@ conda install -y -c conda-forge multinest pymultinest
   to isochrones. If the build fails, read the error: it usually names the
   missing library, and `gsl`/`eigen` from conda-forge (step 1) covers the
   common cases.
-* **The two StarStream gotchas are both upstream**, not in this fork: the
-  `setup.py` packaging bug in step 3, and `agama` needing conda's GSL plus the
-  flags in step 2. `import StarStream` pulls in `agama` via `spray.py`, so
-  agama must be working before StarStream will import at all.
+* **The StarStream gotchas are upstream's**, not this isochrones fork's. The
+  `setup.py` packaging bug is already fixed on our
+  `ngc6569-cluster-analysis` branch, but it is still present on upstream
+  `main` *and* on our fork's `main` — which is why step 3.4 matters. The
+  other is `agama` needing conda's GSL plus the flags in step 2.
+  `import StarStream` pulls in `agama` via `spray.py`, so agama must be
+  working before StarStream will import at all.
 * **MIST v2.5 bolometric corrections span [Fe/H] = −3.0 … +0.5**, while the
   v2.5 model grid goes down to −4.0. Queries below −3.0 fall off the BC grid
   and return NaN magnitudes.
